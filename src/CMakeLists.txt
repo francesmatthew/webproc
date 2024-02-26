@@ -5,14 +5,22 @@ set(WEBPROC_SOURCES
 )
 
 set(INCLUDE_DIRS
-    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
 )
 
 set(WEBPROC_LIBS
     process
+    daemon
+    argumentParser
+    service
+    client
 )
 
+add_subdirectory(argumentParser)
+add_subdirectory(daemon)
 add_subdirectory(process)
+add_subdirectory(service)
+add_subdirectory(client)
 
 # Do not edit below this
 

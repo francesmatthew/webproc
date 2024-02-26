@@ -15,6 +15,7 @@ public:
     void send_eof() { this->stdin_pipe.close_write(); }
 
     const int stdout_fd() const { return this->stdout_pipe.read_fd(); }
+    const int stdin_fd() const { return this->stdin_pipe.write_fd(); }
 
 private:
     int pid = -1;
