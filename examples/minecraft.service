@@ -1,0 +1,36 @@
+# /etc/systemd/system/minecraft.service
+[Unit]
+Description=run java edition minecraft as a daemon
+After=network-online.target
+
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=forking
+User=root
+Group=root
+ExecStart=webproc -d -w /home/franc/Downloads/minecraft-test/ -- java -Xmx6144M -Xms1024M -jar server.jar --nogui
+PIDFile=/run/webprocd.pid
+KillMode=mixed
+KillSignal=SIGINT
+
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+
+User=
+Group=
+
+# TBD
+# NotifyAccess=
+
+# Runtime directory defines a directory to be created in /run/
+# sets $RUNTIME_DIRECTORY env var in process
+#RuntimeDirectory=webprocd
+
+# Log directory defines directory to be created in /var/logs
+# sets $LOGS_DIRECTORY env var in process
+#LogsDirectory=webprocd

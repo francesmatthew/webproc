@@ -1,6 +1,8 @@
 #ifndef ARGUMENT_PARSER_HPP
 #define ARGUMENT_PARSER_HPP
 
+#include "daemon/Daemon.hpp"
+
 class ArgumentParser
 {
 public:
@@ -10,6 +12,7 @@ public:
     bool                mIsDaemon   {false};
     bool                mIsClient   {false};
     const char* const*  mProcArgv   {nullptr};
+    char mChRoot[Daemon::maxStrSize]    {0};
 
 };
 

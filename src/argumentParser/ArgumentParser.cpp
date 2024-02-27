@@ -1,5 +1,6 @@
 #include "ArgumentParser.hpp"
 #include <string>
+#include <string.h>
 #include <iostream>
 
 void ArgumentParser::parse(int argc, const char* const* argv)
@@ -20,6 +21,19 @@ void ArgumentParser::parse(int argc, const char* const* argv)
             this->printHelp();
             ::exit(EXIT_SUCCESS);
         }
+        else if (!arg.compare("-w") || !arg.compare("--workingdir"))
+        {
+            if (argc > ii+1)
+            {
+                ::strncpy(mChRoot, argv[ii+1], sizeof(mChRoot));
+                ii++;
+            }
+            else
+            {
+                std::cerr << "No working directory provided" << std::endl;
+                ::exit(EXIT_FAILURE);
+            }
+        }
         else if (!arg.compare("--"))
         {
             /* the rest of the args are the command string */
@@ -39,8 +53,9 @@ void ArgumentParser::parse(int argc, const char* const* argv)
 
 void ArgumentParser::printHelp()
 {
-    std::cerr << "Usage: webproc [-d] [-h] [--] <command to run> [args for command to run]" << std::endl;
+    std::cerr << "Usage: webproc [-d] [-h] [-w <working directory>] [--] <command to run> [args for command to run]" << std::endl;
     std::cerr << "Options:" << std::endl;
     std::cerr << "    -d, --daemon: run in daemon mode" << std::endl;
+    std::cerr << "    -w, --workingdir: set the working directory of the daemon" << std::endl;
     std::cerr << "    -h, --help: display this message" << std::endl;
 }

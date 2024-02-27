@@ -6,6 +6,7 @@ class Client
     public:
     Client() = default;
     int run();
+    void stdinReadLoop(int sockFd);
 };
 
 #endif /* CLIENT_HPP */

@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <string.h>
 #include <memory>
 #include <sstream>
 #include "process/Process.hpp"
@@ -34,7 +35,15 @@ int main(int argc, const char** argv)
     std::shared_ptr<Daemon> daemon;
     if (argParser.mIsDaemon)
     {
-        daemon = std::shared_ptr<Daemon>(Daemon::daemonize(Service::PID_FILE));
+        if (::strnlen(argParser.mChRoot, sizeof(argParser.mChRoot)) < 1)
+        {
+            /* no chroot provided, use default */
+            daemon = std::shared_ptr<Daemon>(Daemon::daemonize(Service::PID_FILE));
+        }
+        else
+        {
+            daemon = std::shared_ptr<Daemon>(Daemon::daemonize(Service::PID_FILE, argParser.mChRoot));
+        }
         logger->Notice("Daemon thread started.");
     }
 
@@ -58,5 +67,5 @@ int main(int argc, const char** argv)
         service.run();
     }
 
-    return 0;
+    ::exit(EXIT_SUCCESS);
 }

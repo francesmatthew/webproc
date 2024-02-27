@@ -53,7 +53,7 @@ void Service::procReadLoop_sigint_handler(int signal)
 {
     mLogger->Notice("Parent process received SIGINT, shutting down.");
     /* stop process object */
-    mProcess->send_eof();
+    (void)::kill(mProcess->getPid(), SIGINT);
     int status = 0;
     (void)::waitpid(mProcess->getPid(), &status, 0);
     mLogger->Notice("Process ended.");
@@ -74,10 +74,6 @@ void Service::runSocket()
         return;
     }
     procReadLoopReporting.close_read();
-    /*  close process so this process doesn't keep the socket open,
-        the parent still has this write fd open
-    */
-    mProcess->send_eof();
 
     /* create socket */
     int sockFd = ::socket(AF_UNIX, SOCK_STREAM, 0);
@@ -170,10 +166,11 @@ void Service::readConnection(int connFd)
     std::size_t sockBufIndex = 0;
 
     int bytesRead = 0;
+    char ch;
     while (1)
     {
         /* read char into buffer */
-        bytesRead = ::read(connFd, sockBuf+sockBufIndex, sizeof(char));
+        bytesRead = ::read(connFd, &ch, sizeof(char));
 
         /* if no bytes read, terminal may be empty */
         if (bytesRead <= 0)
@@ -182,7 +179,7 @@ void Service::readConnection(int connFd)
             return;
         }
         /* when newline is received, send command */
-        if (sockBuf[sockBufIndex] == '\n')
+        if (ch == '\n')
         {
             sockBuf[sockBufIndex] = 0;
 
@@ -212,13 +209,14 @@ void Service::readConnection(int connFd)
         else if (sockBufIndex == sizeof(sockBuf) -2)
         {
             mLogger->Notice("Connection exceeded buffer line size, terminating connection");
+            (void)::write(connFd, "Command too long.\n", 18);
             ::close(connFd);
             return;
         }
-        /* otherwise, get the next character */
-        else
+        /* if char is valid ASCII, store it and get the next character */
+        else if (ch >= ' ' && ch <= '~')
         {
-            sockBufIndex++;
+            sockBuf[sockBufIndex++] = ch;
         }
     }
 }
@@ -236,10 +234,6 @@ void Service::run()
     ::write(procReadLoopReporting.write_fd(), &status, sizeof(status));
     /* close write to send EOF */
     procReadLoopReporting.close_all();
-    /*  close process so this process doesn't keep the socket open,
-        the parent still has this write fd open
-    */
-    mProcess->send_eof();
 
     /* read from stdin */
     std::string str;
@@ -275,6 +269,8 @@ int Service::runProcessReadLoop(CPipe &procReadLoopReporting)
     /* in parent process */
     mSocketListenerPid = pid;
     ::signal(SIGINT, this->procReadLoop_sigint_handler);
+    /* close write end of process' stdin pip so this process doesn't keep the socket open */
+    mProcess->send_eof();
 
     /* wait for socket to open */
     procReadLoopReporting.close_write();
@@ -285,7 +281,7 @@ int Service::runProcessReadLoop(CPipe &procReadLoopReporting)
     {
         mLogger->Notice("Parent process notified of unsuccessful socket setup, exiting.");
         /* kill process object */
-        mProcess->send_eof();
+        (void)::kill(mProcess->getPid(), SIGINT);
         int status = 0;
         (void)::waitpid(mProcess->getPid(), &status, 0);
         ::exit(EXIT_FAILURE);
@@ -303,7 +299,7 @@ int Service::runProcessReadLoop(CPipe &procReadLoopReporting)
         {
             mLogger->Notice("Process ended, stopping daemon.");
             /* kill process object */
-            mProcess->send_eof();
+            (void)::kill(mProcess->getPid(), SIGINT);
             int status = 0;
             (void)::waitpid(mProcess->getPid(), &status, 0);
             /* kill child thread */
