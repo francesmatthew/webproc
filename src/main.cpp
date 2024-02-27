@@ -38,7 +38,15 @@ int main(int argc, const char** argv)
         logger->Notice("Daemon thread started.");
     }
 
-    auto process = std::make_shared<Process>(argParser.mProcArgv, true);
+    auto process = std::make_shared<Process>(logger, argParser.mProcArgv, true);
+
+    /* check that process started correctly */
+    if (process->getPid() < 0)
+    {
+        /* error will be logged from child process explaining issue */
+        logger->Crit("Process failed to start, service will not be started");
+        ::exit(1);
+    }
 
     Service service(daemon, logger, process);
     if (argParser.mIsDaemon)
@@ -50,20 +58,5 @@ int main(int argc, const char** argv)
         service.run();
     }
 
-    return 0;
-}
-
-int test1(void)
-{
-    std::cout << "Hello, World!" << std::endl;
-
-    const char* const argv[] = {"/bin/cat", (const char*)0};
-    Process cat(argv);
-    cat << "Hello, World!" << '\n';
-
-    char buf[2048];
-    (void)::read(cat.stdout_fd(), buf, 2048);
-    std::cout << "Read from program: '" << buf << "'" << std::endl;
-    cat.send_eof();
     return 0;
 }

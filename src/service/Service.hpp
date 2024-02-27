@@ -31,13 +31,14 @@ private:
     /* fork and start a read loop from the process stdout, and store the results in the buffer */
     int runProcessReadLoop(CPipe &procReadLoopReporting);
     void storeChar(char ch);
-    static void sigint_handler(int signal);
+    static void socketListener_sigint_handler(int signal);
+    static void procReadLoop_sigint_handler(int signal);
     static int mSockFd;
     void readConnection(int connFd);
 
     std::shared_ptr<Daemon> mDaemon;
-    std::shared_ptr<Logger> mLogger;
-    std::shared_ptr<Process> mProcess;
+    static std::shared_ptr<Logger> mLogger;
+    static std::shared_ptr<Process> mProcess;
 
     static const std::size_t mBufferLines = 10; /* number of lines to hold in the buffer */
     static const std::size_t mLineBufferSize = 200; /* number of chars to hold in a line */
@@ -47,6 +48,8 @@ private:
     static std::size_t mBufferIndex; /* index of next line to write to, and one after the previous line written */
     static std::size_t mLineIndex; /* index of next line to write to, and one after the previous line written */
     static bool mLineInvalid;
+
+    static ::pid_t mSocketListenerPid;
 };
 
 #endif /* SERVICE_HPP */

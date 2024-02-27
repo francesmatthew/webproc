@@ -2,7 +2,7 @@
 #include <string>
 #include "Process.hpp"
 
-Process::Process(const char* const argv[], bool search_path, const char* const envp[])
+Process::Process(std::shared_ptr<Logger> &logger, const char* const argv[], bool search_path, const char* const envp[])
 {
     this->pid = ::fork();
     if (this->pid > 0)
@@ -21,11 +21,11 @@ Process::Process(const char* const argv[], bool search_path, const char* const e
         /* close the writing end of stdin pipe */
         this->stdin_pipe.close_write();
         /* rename stdin and stdout file descriptors to those of the pipes */
-        if (::dup2(this->stdin_pipe.read_fd(), STDIN_FILENO) ||
-            ::dup2(this->stdout_pipe.write_fd(), STDOUT_FILENO)
-        )
+        if (::dup2(this->stdin_pipe.read_fd(), STDIN_FILENO)    < 0 ||
+            ::dup2(this->stdout_pipe.write_fd(), STDOUT_FILENO) < 0 )
         {
-            std::runtime_error("Failed to redirect stdin/stdout");
+            logger->Crit("Failed to redirect stdin/stdout of child process");
+            ::exit(1);
         }
         /* close old file descriptors that got reassigned */
         this->stdin_pipe.close_read();
@@ -46,14 +46,14 @@ Process::Process(const char* const argv[], bool search_path, const char* const e
         if (result == -1)
         {
             /* Note: no point writing to stdout here, it has been redirected */
-            std::cerr << "Error: Failed to launch program" << std::endl;
+            logger->Crit("Error: Failed to launch program");
             ::exit(1);
         }
     }
     else
     {
         /* fork error */
-        std::runtime_error("Failed to fork child process");
+        logger->Crit("Failed to fork child process");
     }
 }
 

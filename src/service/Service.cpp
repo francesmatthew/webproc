@@ -23,21 +23,47 @@ bool Service::mLineInvalid = false;
 
 std::size_t mLineWriteIndex = 0;
 
+std::shared_ptr<Logger> Service::mLogger = nullptr;
+std::shared_ptr<Process> Service::mProcess = nullptr;
+
+::pid_t Service::mSocketListenerPid;
+
 Service::Service(std::shared_ptr<Daemon> &daemon, std::shared_ptr<Logger> &logger, std::shared_ptr<Process> &process):
-    mDaemon(daemon), mLogger(logger), mProcess(process)
+    mDaemon(daemon)
 {
+    mLogger = logger;
+    mProcess = process;
 }
 
-void Service::sigint_handler(int signal)
+void Service::socketListener_sigint_handler(int signal)
 {
-    ::syslog(LOG_NOTICE, "Received SIGINT, shutting down.");
+    mLogger->Notice("Child process received SIGINT, shutting down.");
     ::shutdown(Service::mSockFd, 2);
     if (::unlink(Service::SOCKET_DIR) < 0)
     {
-        ::syslog(LOG_ERR, "Failure when unlinking PID file, errno: %d", errno);
+        std::stringstream strBuilder;
+        strBuilder << "Failure when unlinking PID file, errno: ";
+        strBuilder << errno;
+        mLogger->Error(&(strBuilder.str()[0]));
     }
     ::exit(EXIT_SUCCESS);
 }
+
+void Service::procReadLoop_sigint_handler(int signal)
+{
+    mLogger->Notice("Parent process received SIGINT, shutting down.");
+    /* stop process object */
+    mProcess->send_eof();
+    int status = 0;
+    (void)::waitpid(mProcess->getPid(), &status, 0);
+    mLogger->Notice("Process ended.");
+    /* kill child thread */
+    (void)::kill(mSocketListenerPid, SIGINT);
+    status = 0;
+    (void)::waitpid(mSocketListenerPid, &status, 0);
+    ::exit(EXIT_SUCCESS);
+}
+
 
 void Service::runSocket()
 {
@@ -48,6 +74,10 @@ void Service::runSocket()
         return;
     }
     procReadLoopReporting.close_read();
+    /*  close process so this process doesn't keep the socket open,
+        the parent still has this write fd open
+    */
+    mProcess->send_eof();
 
     /* create socket */
     int sockFd = ::socket(AF_UNIX, SOCK_STREAM, 0);
@@ -97,8 +127,11 @@ void Service::runSocket()
         return;
     }
     mSockFd = sockFd;
-    ::signal(SIGINT, this->sigint_handler);
+    ::signal(SIGINT, this->socketListener_sigint_handler);
 
+    /* report status to pipe */
+    int status = 0;
+    ::write(procReadLoopReporting.write_fd(), &status, sizeof(status));
     /* close pipe to send EOF */
     procReadLoopReporting.close_write();
 
@@ -198,8 +231,15 @@ void Service::run()
         mLogger->Crit("Failed to fork service child process.");
         return;
     }
+    /* report status to pipe */
+    int status = 0;
+    ::write(procReadLoopReporting.write_fd(), &status, sizeof(status));
     /* close write to send EOF */
     procReadLoopReporting.close_all();
+    /*  close process so this process doesn't keep the socket open,
+        the parent still has this write fd open
+    */
+    mProcess->send_eof();
 
     /* read from stdin */
     std::string str;
@@ -233,14 +273,26 @@ int Service::runProcessReadLoop(CPipe &procReadLoopReporting)
         return -1;
     }
     /* in parent process */
+    mSocketListenerPid = pid;
+    ::signal(SIGINT, this->procReadLoop_sigint_handler);
 
     /* wait for socket to open */
     procReadLoopReporting.close_write();
-    char ch;
-    (void) ::read(procReadLoopReporting.read_fd(), &ch, sizeof(ch));
+    int status = 1;
+    (void) ::read(procReadLoopReporting.read_fd(), &status, sizeof(status));
     procReadLoopReporting.close_read();
+    if (status)
+    {
+        mLogger->Notice("Parent process notified of unsuccessful socket setup, exiting.");
+        /* kill process object */
+        mProcess->send_eof();
+        int status = 0;
+        (void)::waitpid(mProcess->getPid(), &status, 0);
+        ::exit(EXIT_FAILURE);
+    }
 
     /* blocking read */
+    char ch;
     int bytesRead = 0;
     while (1)
     {
@@ -250,9 +302,13 @@ int Service::runProcessReadLoop(CPipe &procReadLoopReporting)
         if (bytesRead < sizeof(char))
         {
             mLogger->Notice("Process ended, stopping daemon.");
+            /* kill process object */
+            mProcess->send_eof();
+            int status = 0;
+            (void)::waitpid(mProcess->getPid(), &status, 0);
             /* kill child thread */
             (void)::kill(pid, SIGINT);
-            int status = 0;
+            status = 0;
             (void)::waitpid(pid, &status, 0);
             ::exit(EXIT_SUCCESS);
         }
